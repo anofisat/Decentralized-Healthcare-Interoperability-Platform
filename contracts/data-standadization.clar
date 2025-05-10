@@ -1,30 +1,85 @@
+;; Data Standardization Contract
+;; Normalizes medical information formats
 
-;; title: data-standadization
-;; version:
-;; summary:
-;; description:
+(define-data-var admin principal tx-sender)
 
-;; traits
-;;
+;; Map to store supported data standards
+(define-map data-standards (string-utf8 50)
+  {
+    version: (string-utf8 20),
+    schema-hash: (buff 32),
+    active: bool,
+    created-at: uint
+  }
+)
 
-;; token definitions
-;;
+;; Map to store data mappings between standards
+(define-map standard-mappings
+  {source: (string-utf8 50), target: (string-utf8 50)}
+  {
+    mapping-hash: (buff 32),
+    created-at: uint
+  }
+)
 
-;; constants
-;;
+;; Register a new data standard (admin only)
+(define-public (register-standard (name (string-utf8 50)) (version (string-utf8 20)) (schema-hash (buff 32)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) (err u403))
+    (ok (map-set data-standards name
+      {
+        version: version,
+        schema-hash: schema-hash,
+        active: true,
+        created-at: block-height
+      }
+    ))
+  )
+)
 
-;; data vars
-;;
+;; Deactivate a data standard (admin only)
+(define-public (deactivate-standard (name (string-utf8 50)))
+  (let ((standard-data (unwrap! (map-get? data-standards name) (err u404))))
+    (begin
+      (asserts! (is-eq tx-sender (var-get admin)) (err u403))
+      (ok (map-set data-standards name
+        (merge standard-data {
+          active: false
+        })
+      ))
+    )
+  )
+)
 
-;; data maps
-;;
+;; Register a mapping between standards (admin only)
+(define-public (register-mapping
+  (source (string-utf8 50))
+  (target (string-utf8 50))
+  (mapping-hash (buff 32)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get admin)) (err u403))
+    (asserts! (is-some (map-get? data-standards source)) (err u404))
+    (asserts! (is-some (map-get? data-standards target)) (err u404))
+    (ok (map-set standard-mappings {source: source, target: target}
+      {
+        mapping-hash: mapping-hash,
+        created-at: block-height
+      }
+    ))
+  )
+)
 
-;; public functions
-;;
+;; Get standard information
+(define-read-only (get-standard (name (string-utf8 50)))
+  (map-get? data-standards name)
+)
 
-;; read only functions
-;;
+;; Get mapping between standards
+(define-read-only (get-mapping (source (string-utf8 50)) (target (string-utf8 50)))
+  (map-get? standard-mappings {source: source, target: target})
+)
 
-;; private functions
-;;
-
+;; Check if a standard is active
+(define-read-only (is-standard-active (name (string-utf8 50)))
+  (default-to false (get active (map-get? data-standards name)))
+)
